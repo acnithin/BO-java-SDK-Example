@@ -1,0 +1,41 @@
+package com.hcl.bo.webi.retrieveSQL;
+
+import java.util.Iterator;
+import java.util.LinkedHashSet;
+
+import com.crystaldecisions.sdk.exception.SDKException;
+
+public class FolderNavigation {
+
+  
+	public static void main(String[] args) throws SDKException {
+		DocumentNavigation iDocNavi=new DocumentNavigation();
+		String sID;
+		String nof=args[0];
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		final LinkedHashSet<String> folders = new LinkedHashSet();
+		
+		int noff = Integer.parseInt(nof);
+		
+	    for(int i=1; i<=noff;i++)
+	    {
+	    	folders.add(args[i]);
+	    }
+	    
+	  String fileName=args[noff+1];
+		String username = args[noff+2];
+			String password = args[noff+3];
+			String cmsname  = args[noff+4];
+			String authenticationType = args[noff+5];
+	    @SuppressWarnings("rawtypes")
+		Iterator iter=folders.iterator();
+	    while (iter.hasNext())
+	    {
+	    	 sID=iter.next().toString();
+	    	System.out.println(sID+" "+fileName+" "+username+" "+password+" "+cmsname+" "+authenticationType);
+	    	iDocNavi.DocNavi(sID, fileName, username, password, cmsname, authenticationType);
+	    }
+	}
+
+}
+
