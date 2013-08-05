@@ -1,0 +1,161 @@
+package com.hcl.bo.queryExtraction;
+
+
+
+
+import com.crystaldecisions.sdk.framework.*;
+import com.crystaldecisions.sdk.exception.SDKException;
+import com.crystaldecisions.sdk.occa.infostore.*;
+import com.businessobjects.rebean.wi.*;
+import java.io.*;
+
+
+public class Extract {
+  
+
+
+ 
+public  void runExtract(String docname,String outputFileName,String username,String password,String cmsname,String authenticationType) throws IOException, SDKException
+//public static void main(String args[]) throws SDKException, IOException
+{
+	boolean loginSuccessful = false;
+	IEnterpriseSession oEnterpriseSession = null;
+	/*String username = args[1];
+	String password =args[2];
+	String cmsname  = args[3];
+	String authenticationType = args[4];
+	String outputFileName=args[0];
+	
+	 */
+	int b=0;
+	int k=1;
+	 
+try
+ { 
+//Log in. 
+	ISessionMgr sessionMgr;
+	//IEnterpriseSession oEnterpriseSession;
+	sessionMgr = CrystalEnterprise.getSessionMgr();
+oEnterpriseSession = sessionMgr.logon( username, password, cmsname, authenticationType); 
+if (oEnterpriseSession == null)
+ {  
+System.out.println("login failed"); 
+} 
+else 
+{  loginSuccessful = true;
+System.out.println("loginSuccessful");
+ }
+} 
+catch (SDKException sdkEx)
+ { System.out.println("SDK exception");}
+
+File file=new File(outputFileName);
+boolean exists = file.exists();
+if (!exists) {
+	b=1;
+	System.out.println("file does not exist");
+}
+FileWriter fstream = new FileWriter(outputFileName,true);
+BufferedWriter out = new BufferedWriter(fstream); 
+
+if(b==1){
+	 out.write("Report Name~Query Number~SQL Statement");
+	 out.newLine();
+	}
+ 
+//----------------------------------------------------------------------------------------
+if (loginSuccessful) 
+{
+ 
+IInfoObject oInfoObject = null;
+
+// String docname = "Sample Web Intelligence Document";
+ IInfoStore oInfoStore = (IInfoStore) oEnterpriseSession.getService("", "InfoStore"); 
+ 
+ //Grab the InfoStore from the http session IInfoStore oInfoStore = (IInfoStore) oEnterpriseSession.getService("", "InfoStore"); 
+
+ //Query for the report object in the CMS.  See the Developer Reference guide for more information the query language.
+
+
+  String query = "SELECT TOP 1 * " +"FROM CI_INFOOBJECTS " +"WHERE SI_INSTANCE = 0 And SI_Kind = 'Webi' " +"AND SI_NAME='" + docname + "'";
+ 
+ IInfoObjects oInfoObjects = (IInfoObjects) oInfoStore.query(query);
+
+ if (oInfoObjects.size() > 0) 
+{ 
+ //Retrieve the latest instance of the report 
+	 oInfoObject = (IInfoObject) oInfoObjects.get(0);
+  // Initialise the Report Engine 
+	 ReportEngines oReportEngines = (ReportEngines) 
+
+oEnterpriseSession.getService("ReportEngines");  
+ReportEngine oReportEngine = (ReportEngine) oReportEngines.getService(ReportEngines.ReportEngineType.WI_REPORT_ENGINE);
+ 
+  
+// Opening the document 
+DocumentInstance oDocumentInstance = oReportEngine.openDocument(oInfoObject.getID());    
+DataProvider oDataProvider = null;  
+SQLDataProvider oSQLDataProvider = null;  
+SQLContainer oSQLContainer_root = null;  
+SQLNode oSQLNode = null; 
+SQLSelectStatement oSQLSelectStatement = null;  
+String sqlStatement = null;
+  //System.out.println("list of Data Providers"); 
+ for (int i=0; i<oDocumentInstance.getDataProviders().getCount(); i++)
+ {   
+oDataProvider = oDocumentInstance.getDataProviders().getItem(i); 
+ // System.out.println("Data Provider Name: " + oDataProvider.getName());
+ 
+   if (oDataProvider instanceof SQLDataProvider)
+ {    
+oSQLDataProvider = (SQLDataProvider) oDataProvider;
+    oSQLContainer_root = oSQLDataProvider.getSQLContainer();
+ 
+    if (oSQLContainer_root != null)
+ {    
+    	
+ for (int j=0; j<oSQLContainer_root.getChildCount(); j++)
+ {     
+	
+ oSQLNode = (SQLNode) oSQLContainer_root.getChildAt(j);
+      oSQLSelectStatement = (SQLSelectStatement) oSQLNode;              
+sqlStatement = oSQLSelectStatement.getSQL();
+//System.out.println(k);
+
+//System.out.println("SQLStatement:" + sqlStatement);   
+//System.out.println(docname+"~"+j+"~"+sqlStatement+"~");
+String manipSQL=sqlStatement;
+String LS=System.getProperty("line.separator").toString();
+System.out.println("ls:"+LS);
+//String mSQL=manipSQL.replaceAll(LS, " ");
+manipSQL.replaceAll("CRLF", " ");
+String mSQL=manipSQL.replaceAll("\r\n", "");
+String m1SQL=mSQL.replaceAll("  ", " ");
+//manipSQL.replaceAll("LF", " ");
+System.out.println(m1SQL);
+out.write(docname+"~"+k+"~"+m1SQL);
+out.newLine();	 
+	 System.out.println("printing...");
+	
+	 k++;
+     
+ }
+ 
+}
+ }
+
+ else 
+{    
+System.out.println("Data Provider is not a SQLDataProvider.  SQL Statement can not be retrieved."); 
+  }  
+}  
+
+  oDocumentInstance.closeDocument(); 
+  out.flush();
+  out.close();
+  }
+ oEnterpriseSession.logoff();
+ }
+}
+}
+
