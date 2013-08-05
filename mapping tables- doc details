@@ -1,0 +1,342 @@
+package com.hcl.bis.coe.bo.mappingTable;
+
+
+
+
+import com.crystaldecisions.sdk.framework.*;
+import java.util.*;
+import java.io.*;
+
+import org.gibello.zql.*;
+
+import com.crystaldecisions.sdk.exception.SDKException;
+import com.crystaldecisions.sdk.occa.infostore.*;
+import com.businessobjects.rebean.wi.*;
+
+public class DocDetails {
+  
+	@SuppressWarnings({  "rawtypes" })
+	private final static Set tables = new HashSet(); 
+	@SuppressWarnings("rawtypes")
+	 
+	private final static LinkedHashSet columns = new LinkedHashSet();
+	private static Object table="";
+	
+	
+	public static final char LF = '\n';
+    public static final char CR = '\r';
+
+		
+		boolean loginSuccessful = false;
+		IEnterpriseSession oEnterpriseSession = null;
+		
+	
+		public  void Doc(String documentName,String filename,String userName,String Password,String cmsName,String authentication,int x) throws SDKException, IOException
+		{
+		
+			String username = userName;
+			String password = Password;
+			String cmsname  = cmsName;
+			String authenticationType = authentication;
+			String docname=documentName;
+			String outputFileName= filename;
+			columns.clear();
+		
+		
+			 int l=1;
+			
+		try
+		 { 
+			ISessionMgr sessionMgr;
+			
+			
+		//Log in 
+			sessionMgr = CrystalEnterprise.getSessionMgr();
+			 oEnterpriseSession = sessionMgr.logon( username, password, cmsname, authenticationType);
+			
+			if (oEnterpriseSession == null)
+		 {  
+		System.out.println("login failed"); 
+		} 
+		else 
+		{  loginSuccessful = true;
+		System.out.println("loginSuccessful");
+		 }
+		} 
+		catch (SDKException sdkEx)
+		 { System.out.println("SDK exception");
+		 }
+		 
+		//------------------------------------------------------------------------------------------------------------------
+		if (loginSuccessful) 
+		{
+		 
+		IInfoObject oInfoObject = null;
+
+		
+		 
+		 //Grab the InfoStore from the http session 
+		 IInfoStore oInfoStore = (IInfoStore) oEnterpriseSession.getService("", "InfoStore"); 
+
+		 //Query for the report object in the CMS.  See the Developer Reference guide for more information the query language.
+
+
+		  String query = "SELECT TOP 1 * " +"FROM CI_INFOOBJECTS " +"WHERE SI_INSTANCE = 0 And SI_Kind = 'Webi' " +"AND SI_NAME='" + docname + "'";
+		 
+		 IInfoObjects oInfoObjects = (IInfoObjects) oInfoStore.query(query);
+		 
+
+		 if (oInfoObjects.size() > 0) 
+		{ 
+		 //Retrieve the latest instance of the report  
+			 oInfoObject = (IInfoObject) oInfoObjects.get(0);
+			 //changed for get parent folder name
+			// int parentFolderId = oInfoObject.getParentID();
+			 //String infoStoreQuery = "select SI_ID,SI_NAME,SI_PARENTID from CI_INFOOBJECTS where SI_ID="+parentFolderId ;
+			 //oInfoObjects = oInfoStore.query(infoStoreQuery); 
+				//IInfoObject folder = (IInfoObject)oInfoObjects.get(0);
+				//String folderName = folder.getTitle();
+				//int parentFolderId = folder.getParentID();  
+				
+		  // Initialise the Report Engine  
+			 ReportEngines oReportEngines = (ReportEngines) 
+
+		oEnterpriseSession.getService("ReportEngines");  
+		ReportEngine oReportEngine = (ReportEngine) oReportEngines.getService(ReportEngines.ReportEngineType.WI_REPORT_ENGINE);
+		 
+		  
+		// Opening the document 
+		DocumentInstance oDocumentInstance = oReportEngine.openDocument(oInfoObject.getID());    
+		DataProvider oDataProvider = null;  
+		SQLDataProvider oSQLDataProvider = null;  
+		SQLContainer oSQLContainer_root = null;  
+		SQLNode oSQLNode = null; 
+		SQLSelectStatement oSQLSelectStatement = null;  
+		String sqlStatement = null;
+		  System.out.println("list of Data Providers"); 
+		 for (int i=0; i<oDocumentInstance.getDataProviders().getCount(); i++)
+		 {   
+		oDataProvider = oDocumentInstance.getDataProviders().getItem(i); 
+		  System.out.println("Data Provider Name: " + oDataProvider.getName());
+		  
+		 String ProviderName=oDataProvider.getName();
+	
+		 
+		   if (oDataProvider instanceof SQLDataProvider)
+		 {    
+		oSQLDataProvider = (SQLDataProvider) oDataProvider;
+		    oSQLContainer_root = oSQLDataProvider.getSQLContainer();
+		 
+		    if (oSQLContainer_root != null)
+		 {    
+		 for (int j=0; j<oSQLContainer_root.getChildCount(); j++)
+		 {     
+		 oSQLNode = (SQLNode) oSQLContainer_root.getChildAt(j);
+		      oSQLSelectStatement = (SQLSelectStatement) oSQLNode;              
+		sqlStatement = oSQLSelectStatement.getSQL();    
+		//getting report folder name
+		//IInfoObject myReportWithParentFolder = (IInfoObject)OInfoObjects get(0)
+		 
+		// ID of the folder that contains the report  
+		// BEGIN now loop through the folders going backwards to get full path to the report
+		// loop not shown 
+		
+		
+		 // Parsing the SQL using zql libraries
+	
+		try {      
+		
+			
+		
+			if(sqlStatement.startsWith("("))
+			{
+				//System.out.println("q1"+sqlStatement);
+				String sqlStatement2=chop(sqlStatement);
+				System.out.println("2"+sqlStatement2);
+				//sqlStatement=sqlStatement2.replaceFirst("(", "");
+				if(sqlStatement2.startsWith("("))
+				{
+					sqlStatement=sqlStatement2.substring(1);
+				      
+				}
+				
+				
+				System.out.println("inside if :"+sqlStatement);
+			}
+
+			//System.out.println(sqlStatement);
+			parseSql(sqlStatement);               
+			} catch (ParseException e) 
+			{          
+				System.out.println("parser exception");
+				//don't want  classes exposed outside this class     
+			}         
+			saveFile(docname,x,outputFileName,ProviderName);
+			
+		 }
+		 }
+		 }
+		
+		 try
+		 {
+			 File file=new File(outputFileName);
+			    boolean exists = file.exists();
+			    if (!exists) {
+			    	//b=1;
+			    }
+			 
+			    
+			 // to check file is empty or not
+			 
+			 
+			
+			/* 
+			 	if(b==1){
+			 out.write("Source Report Name,Source Column Name,Source Column  Position,Target Report Name,Target Column Name,Target Column  Position, Report number");
+			 out.newLine();
+			}
+			*/
+			
+		 }
+		 finally
+		 {
+			// oDocumentInstance.closeDocument();
+			 
+		 }
+		
+		 l++;
+		 
+		}   
+		}
+		 else 
+		{    
+		System.out.println("Data Provider is not a SQLDataProvider.  SQL Statement can not be retrieved."); 
+		  }  
+		  // }  
+
+		 // oDocumentInstance.closeDocument();
+		  }
+		
+		 oEnterpriseSession.logoff();
+		 }
+	
+		private static void saveFile(String docname2, int x,String outputFileName,String ProviderName) throws IOException
+		{
+			FileWriter fstream = new FileWriter(outputFileName,true);
+			 BufferedWriter out = new BufferedWriter(fstream);
+			@SuppressWarnings("rawtypes")
+			Iterator iter=columns.iterator();
+			
+			int k=1;
+			 while (iter.hasNext())
+			 {
+				
+				
+				String docname3=docname2;
+				 ProviderName=ProviderName.replace("uery ", "");
+				 docname2=docname2.concat("_"+ProviderName+".csv");
+				 
+				 String column1=iter.next().toString();
+				 String column2=column1.replace(")", "");
+				 System.out.println(column2);
+			 out.write(docname2+","+docname2+","+column2+","+k+","+column2+","+k+","+x);
+			 out.newLine();
+			 k++;
+			 docname2=docname3;
+			 }
+			 out.flush();
+			 out.close();
+		 //oEnterpriseSession.logoff();
+		}
+
+	 @SuppressWarnings("deprecation")       
+		private static void parseSql(String sql) throws ParseException {     
+			if (!sql.endsWith(";")){                       
+				sql = sql + ";"; //Zql requires everything to end with a semi colon             
+				}              
+			InputStream input = new java.io.StringBufferInputStream(sql);     
+			ZqlParser parser = new ZqlParser(input);               
+			ZStatement stmt = parser.readStatement();               
+			recordTablesAndColumns(stmt);       
+			}          
+		private static void recordTablesAndColumns(ZStatement stmt) { 
+			if (stmt instanceof ZQuery){        
+				recordTablesAndColumns((ZQuery) stmt);   
+				} else if (stmt instanceof ZDelete) {    
+					recordTablesAndColumns((ZDelete) stmt);   
+					} else if (stmt instanceof ZInsert) {       
+						recordTablesAndColumns((ZInsert) stmt);   
+						} else if (stmt instanceof ZUpdate) {        
+							recordTablesAndColumns((ZUpdate) stmt);    
+							} 
+						else {        
+								throw new UnsupportedOperationException("unrecognized Zql class: " + stmt.getClass());            
+								}        
+			}           
+		@SuppressWarnings("unchecked")  
+		private static void recordTablesAndColumns(ZQuery stmt) {   
+			columns.clear();
+			Iterator<ZSelectItem> zcolumns = stmt.getSelect().iterator();      
+			while (zcolumns.hasNext()) {       
+				ZSelectItem item = zcolumns.next();  
+				columns.add(item.getColumn());
+				//column=column+" "+item;
+				
+				}  
+			//System.out.println("column:"+column);
+			Iterator<ZFromItem> ztables = stmt.getFrom().iterator(); 
+			while (ztables.hasNext()) {                     
+				ZFromItem item = ztables.next();             
+				tables.add(item.getTable());      
+				table=table+" "+item;
+			
+				
+				}  
+			//System.out.println("tables:"+table);
+			}         
+		private static void recordTablesAndColumns(ZDelete stmt) {   
+			throw new UnsupportedOperationException("unrecognized Zql class: " + stmt.getClass());      
+			}                   
+		private static void recordTablesAndColumns(ZInsert stmt) {      
+			throw new UnsupportedOperationException("unrecognized Zql class: " + stmt.getClass());    
+			}                  
+		private static void recordTablesAndColumns(ZUpdate stmt) {  
+			throw new UnsupportedOperationException("unrecognized Zql class: " + stmt.getClass());     
+			} 
+		
+		public static String chop(String str) {
+		      if (str == null) {
+		          return null;
+		      }
+		      int strLen = str.length();
+		      if (strLen < 2) {
+		          return "";
+		      }
+		      int lastIdx = strLen - 1;
+		      String ret = str.substring(0, lastIdx);
+		      char last = str.charAt(lastIdx);
+		      if (last == LF) {
+		          if (ret.charAt(lastIdx - 1) == CR) {
+		              //return ret.substring(0, lastIdx - 1);
+		          }
+		          for(int i=0;i<=lastIdx;i++)
+		          {
+		        	  char pos=str.charAt(lastIdx-i);
+		        	  if(pos==')')
+		        	  {
+		        		  return ret.substring(0, lastIdx - i);
+		        		
+		        	  }
+		        	
+		          }
+		          
+		      }
+		      System.out.println("ret:"+ret);
+		      return ret;
+		  }
+		
+		
+		 public static boolean isEmpty(String str) {
+		      return str == null || str.length() == 0;
+		  }
+}
