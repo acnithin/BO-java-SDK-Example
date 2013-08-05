@@ -1,0 +1,733 @@
+package com.hcl.bis.coe.connection;
+import java.sql.*;
+import java.util.*;
+import java.io.*;
+
+import java.util.*;
+import java.io.*;
+
+import org.apache.poi.xssf.usermodel.*;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import oracle.jdbc.*;
+import oracle.jdbc.pool.OracleDataSource;
+import oracle.jdbc.dcn.*;
+@SuppressWarnings("unused")
+public class batchexcel {
+  //static final String USERNAME= "scott";
+	//static final String PASSWORD= "tiger";
+	//static String URL = "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=HCL-SEZ-COE-VM6)(PORT=1521))(CONNECT_DATA=(SERVER = DEDICATED)(SERVICE_NAME=ora11gr2)))";
+	OracleConnection getConn = null;
+	PreparedStatement getPstmt = null;
+	 
+	public static void main(String[] args)throws Exception  {
+		OracleConnection conn1 = null;
+		String Excel_File=args[4];
+		String input_file=args[3];
+		 final  String USERNAME= args[0];
+		 final String PASSWORD= args[1];
+		final String URL = args[2];
+		int b=0;
+		
+		System.out.println(URL+"	"+USERNAME+"	"+PASSWORD+"	"+ input_file+"	"+Excel_File);
+		
+		// USERNAME,PASSWORD,URL,input_file,Excel_File
+		// String USERNAME,String PASSWORD,String URL,String input_file,String Excel_File
+		// delete excel file if already present
+		
+		
+		try {
+			 File file=new File(Excel_File);
+			    boolean exists = file.exists();
+			    if (!exists) {
+			    	b=1;
+			    	System.out.println("file not exist");
+			    }else
+			    {
+			    	boolean success = file.delete();
+
+			        if (!success)
+			          throw new IllegalArgumentException("Delete: deletion failed");
+
+			    	
+			    } 
+			    
+			    
+			    
+		}catch (Exception e) {
+			e.printStackTrace();
+		} 
+			    
+		Workbook wb = new XSSFWorkbook();
+	    FileOutputStream fileOut = new FileOutputStream(Excel_File);
+	    
+			BatchUpdate(USERNAME,PASSWORD,URL,input_file);
+			column_str(USERNAME,PASSWORD,URL);
+			duplicate_reports(USERNAME,PASSWORD,URL);
+			subset_reports(USERNAME,PASSWORD,URL);
+			unique_reports(USERNAME,PASSWORD,URL);
+			statistics(USERNAME,PASSWORD,URL);
+			duplicate_count(wb,USERNAME,PASSWORD,URL);
+			subset_count(wb,USERNAME,PASSWORD,URL);
+			unique_count(wb,USERNAME,PASSWORD,URL);
+		    reports_details(wb,USERNAME,PASSWORD,URL);
+		    report_column_Information(wb,USERNAME,PASSWORD,URL);
+
+		     
+		    wb.write(fileOut);
+		    fileOut.close();
+		     
+		}
+		
+	
+
+	
+	
+
+	static OracleConnection connect(String USERNAME,String PASSWORD,String URL)
+	  {
+	    OracleConnection conn = null;
+	    try{
+	      OracleDriver dr = new OracleDriver();
+	      Properties prop = new Properties();
+	      
+		prop.setProperty("user",USERNAME);
+	      prop.setProperty("password",PASSWORD);
+	      conn = (OracleConnection)dr.connect(URL,prop);
+	      conn.setAutoCommit(false);
+	    } catch( SQLException ex ){ex.printStackTrace(); }
+	    return conn;
+	  }
+
+	static void BatchUpdate(String USERNAME,String PASSWORD,String URL,String input_file)
+	{
+		//create a prepared statement
+		OracleConnection conn1 = null;
+		conn1=connect(USERNAME,PASSWORD,URL);
+		try{
+			
+	// batch write the input file details into database
+			
+			((OracleConnection)conn1).setDefaultExecuteBatch(10000);
+		PreparedStatement ps =conn1.prepareStatement ("insert into report_Metadata values (?, ?, ?, ?,?, ?, ?, ?)");
+		BufferedReader fh =new BufferedReader(new FileReader(input_file));
+		java.util.Date date = new java.util.Date();
+	      long t = date.getTime();
+		java.sql.Date sqlDate = new java.sql.Date(t);
+		String s;
+		s=fh.readLine();
+		while ((s=fh.readLine())!=null){
+			String f[] = s.split("\t");
+			String test = f[0];
+			int rid=0;
+		     for ( int i = 0; i < test.length(); ++i ) {
+		       char c = test.charAt( i );
+		       int j = (int) c;
+		      rid=rid+j;
+		       } 
+			ps.setString (1, f[0]);
+			ps.setString (2, f[1]);
+			ps.setString (3, f[2]);
+			ps.setString (4, f[3]);
+			ps.setString (5, f[4]);
+			ps.setString (6, f[5]);
+			ps.setDate(7, sqlDate) ;
+			ps.setLong(8, rid);
+			//ps.addBatch();
+			//System.out.println(f[0]+"  "+f[1]+"  "+f[2]+"  "+f[3]+"  "+f[4]+"  "+sqlDate);
+			// this execute does not actually happen at this point
+		//System.out.println(ps.executeUpdate());
+			ps.executeUpdate ();
+		}
+
+		
+		// this execute does not actually happen at this point
+	   int rows = ps.executeUpdate ();  
+	    System.out.println ("Number of rows updated before calling sendBatch: "+ rows);
+
+	    // Execution of both previously batched executes will happen
+	    // at this point. The number of rows updated will be
+	    // returned by sendBatch
+	   rows = ((OraclePreparedStatement)ps).sendBatch();
+
+	    System.out.println ("Number of rows updated by calling sendBatch: "+ rows);
+	//ps.executeBatch();
+	    ps.close ();
+	    conn1.close ();
+	}catch(Exception e )
+	{
+		System.out.println("exception "+ e);
+		e.printStackTrace();
+	}finally{
+		System.out.println("report metadata batch update done");
+		   
+	}
+		
+	}
+	
+	static void column_str(String USERNAME,String PASSWORD,String URL)
+	{
+		OracleConnection conn1 = null;
+		try
+		{
+			conn1 = connect(USERNAME,PASSWORD,URL);
+			Statement stmt2 = conn1.createStatement();
+		
+		stmt2.execute("INSERT INTO REPORT_COLUMN_STR(REPORT_ID,REPORT_NAME,COLUMN_STR,REPORT_OWNER,REPORT_FOLDER,REPORT_PATH,LOAD_DATE,COL_COUNT)SELECT OUTER.REPORT_ID,OUTER.REPORT_NAME,OUTER.COLUMN_TABLE_NAME||'!'||OUTER.COLUMN_NAME,OUTER.REPORT_OWNER,OUTER.REPORT_FOLDER,OUTER.REPORT_PATH,SYSDATE,CNT FROM (SELECT REPORT_NAME,COUNT(COLUMN_NAME) CNT FROM REPORT_METADATA GROUP BY REPORT_NAME) INNER,REPORT_METADATA OUTER WHERE OUTER.REPORT_NAME=INNER.REPORT_NAME");
+		System.out.println("report colum_str parsed");
+		stmt2.close();
+		conn1.close();
+		}catch(Exception e )
+		{
+			e.printStackTrace();
+		}
+	}
+	
+	
+	
+	
+	
+		
+		static void duplicate_reports(String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("duplicate reports sql parsing start");
+			stmt.addBatch("INSERT INTO REPORT_STATS(REPORT_ID ,REPORT_NAME ,DEPENDENT_REPORT_ID,DEPENDENT_REPORT_NAME,DEPENDENCY_TYPE,REPORT_OWNER,REPORT_PATH,REPORT_FOLDER,DEPENDENT_REPORT_OWNER,DEPENDENT_REPORT_PATH,DEPENDENT_REPORT_FOLDER) SELECT REPORT_ID,REPORT_NAME,DEPENDENT_REPORT_ID,DEPENDENT_REPORT_NAME,'D',REPORT_OWNER,REPORT_PATH,REPORT_FOLDER,DEPENDENT_REPORT_OWNER,DEPENDENT_REPORT_PATH,DEPENDENT_REPORT_FOLDER FROM(SELECT A.REPORT_ID DEPENDENT_REPORT_ID,A.REPORT_NAME DEPENDENT_REPORT_NAME,A.REPORT_OWNER DEPENDENT_REPORT_OWNER,A.REPORT_PATH DEPENDENT_REPORT_PATH,A.REPORT_FOLDER DEPENDENT_REPORT_FOLDER,B.REPORT_ID REPORT_ID,B.REPORT_NAME REPORT_NAME,B.REPORT_OWNER REPORT_OWNER,B.REPORT_PATH REPORT_PATH,B.REPORT_FOLDER REPORT_FOLDER,COUNT(A.COLUMN_STR) DRCNT,COUNT(B.COLUMN_STR) RCNT, A.COL_COUNT LCNT FROM REPORT_COLUMN_STR A,REPORT_COLUMN_STR B WHERE A.COLUMN_STR=B.COLUMN_STR AND A.COL_COUNT=B.COL_COUNT AND A.REPORT_ID<>B.REPORT_ID GROUP BY A.REPORT_ID, A.REPORT_NAME,B.REPORT_ID,B.REPORT_NAME, A.REPORT_ID,A.REPORT_NAME,B.REPORT_ID,B.REPORT_NAME, A.REPORT_OWNER,A.REPORT_PATH,A.REPORT_FOLDER,B.REPORT_OWNER,B.REPORT_PATH,B.REPORT_FOLDER,A.COL_COUNT) WHERE RCNT=LCNT AND DRCNT=LCNT");
+			stmt.addBatch("commit");
+			stmt.executeBatch();
+			System.out.println("duplicate reports found");
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		static void subset_reports(String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("substitute  reports sql parsing start");
+			stmt.addBatch("INSERT INTO REPORT_STATS (REPORT_ID ,REPORT_NAME ,DEPENDENT_REPORT_ID ,DEPENDENT_REPORT_NAME ,DEPENDENCY_TYPE,REPORT_OWNER,REPORT_PATH,REPORT_FOLDER,DEPENDENT_REPORT_OWNER,DEPENDENT_REPORT_PATH,DEPENDENT_REPORT_FOLDER) SELECT REPORT_ID,REPORT_NAME,DEPENDENT_REPORT_ID,DEPENDENT_REPORT_NAME,'S',REPORT_OWNER,REPORT_PATH,REPORT_FOLDER,DEPENDENT_REPORT_OWNER,DEPENDENT_REPORT_PATH,DEPENDENT_REPORT_FOLDER FROM(SELECT A.REPORT_ID DEPENDENT_REPORT_ID,A.REPORT_NAME DEPENDENT_REPORT_NAME,A.REPORT_OWNER DEPENDENT_REPORT_OWNER,A.REPORT_PATH DEPENDENT_REPORT_PATH,A.REPORT_FOLDER DEPENDENT_REPORT_FOLDER,B.REPORT_ID REPORT_ID,B.REPORT_NAME REPORT_NAME,B.REPORT_OWNER REPORT_OWNER,B.REPORT_PATH REPORT_PATH,B.REPORT_FOLDER REPORT_FOLDER,COUNT(A.COLUMN_STR) DRCNT,COUNT(B.COLUMN_STR) RCNT, A.COL_COUNT LCNT FROM REPORT_COLUMN_STR A,REPORT_COLUMN_STR B WHERE A.COLUMN_STR=B.COLUMN_STR AND A.COL_COUNT<>B.COL_COUNT AND A.REPORT_ID<>B.REPORT_ID GROUP BY  A.REPORT_ID,A.REPORT_NAME,B.REPORT_ID,B.REPORT_NAME, A.REPORT_OWNER,A.REPORT_PATH,A.REPORT_FOLDER,B.REPORT_OWNER,B.REPORT_PATH,B.REPORT_FOLDER, A.COL_COUNT) WHERE RCNT=LCNT");
+			stmt.addBatch("commit");
+			stmt.executeBatch();
+			System.out.println(" substitute  reports found");
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		
+		
+		static void unique_reports(String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("unique  reports sql parsing start");
+			stmt.addBatch("INSERT INTO REPORT_STATS SELECT DISTINCT REPORT_ID,REPORT_NAME,NULL,NULL,'U',REPORT_OWNER,REPORT_PATH,REPORT_FOLDER,NULL,NULL,NULL FROM REPORT_COLUMN_STR A WHERE NOT EXISTS (SELECT DISTINCT REPORT_NAME FROM REPORT_STATS B WHERE A.REPORT_NAME=B.DEPENDENT_REPORT_NAME) ");
+			stmt.addBatch("commit");
+			stmt.executeBatch();
+			System.out.println(" unique  reports found");
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		static void statistics(String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("statistics start");
+			ResultSet rs =stmt.executeQuery("select count(distinct case when T750.DEPENDENCY_TYPE = 'D' then T750.DEPENDENT_REPORT_ID end ) as c1, count(distinct case when T750.DEPENDENCY_TYPE = 'S' then T750.DEPENDENT_REPORT_ID end ) as c2, count(distinct case when T750.DEPENDENCY_TYPE = 'U' then T750.REPORT_ID end ) as c3 from REPORT_STATS T750 where ( T750.DEPENDENCY_TYPE in ('D', 'S', 'U') )  ");
+			
+			while(rs.next())
+			{
+				String s =rs.getString(1);
+				String s1 =rs.getString(2);
+				String s2 =rs.getString(3);
+				
+				
+				System.out.println(s+"  "+s1+"  "+s2);
+				
+			}
+			
+			//System.out.println(" statistics");
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		static void duplicate_count( Workbook wb,String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			Map<String, CellStyle> styles = createStyles(wb);
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("duplicate count start");
+			ResultSet rs =stmt.executeQuery("select T750.REPORT_NAME as c1, count(distinct T750.DEPENDENT_REPORT_ID) as c2 from REPORT_STATS T750 where ( T750.DEPENDENCY_TYPE = 'D' ) group by T750.REPORT_NAME order by c1  ");
+			
+			// Get result set meta data
+		    ResultSetMetaData rsmd = rs.getMetaData();
+		    int numColumns = rsmd.getColumnCount();
+		    Sheet sheet = wb.createSheet("duplicate_count");
+		    Row headerRow = sheet.createRow(0);
+	        headerRow.setHeightInPoints(12.75f);
+
+		    // Get the column names; column indices start from 1
+		    for (int i=1; i<numColumns+1; i++) {
+		        String columnName = rsmd.getColumnName(i);
+		        System.out.println(columnName);
+		        
+		    }
+		    Cell cell1 = headerRow.createCell(0);		    
+            cell1.setCellValue("Report Name");
+            cell1.setCellStyle(styles.get("header"));
+            Cell cell2 = headerRow.createCell(1);
+            cell2.setCellValue("Count Of Dependent Reports");
+            cell2.setCellStyle(styles.get("header"));
+            
+		    Row row;
+	        Cell cell;
+	        int rownum = 1;
+		    
+		    while(rs.next())
+		    {
+		    	String s=rs.getString(1);
+		    	String s1=rs.getString(2);
+		    	
+		    	 row = sheet.createRow(rownum);
+		    	 for(int i=1;i<=numColumns;i++)
+		    	 {
+		    		 cell=row.createCell(i-1);
+		    		 cell.setCellValue(rs.getString(i));
+		    	 }
+		    	rownum++;
+		    }
+
+		    sheet.setColumnWidth(0, 256*60);
+	        sheet.setColumnWidth(1, 256*30);
+		    
+			//System.out.println(" statistics");
+		    
+		    
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		static void subset_count(Workbook wb,String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			Map<String, CellStyle> styles = createStyles(wb);
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("subset count start");
+			ResultSet rs =stmt.executeQuery("select T750.REPORT_NAME as c1, count(distinct T750.DEPENDENT_REPORT_ID) as c2 from REPORT_STATS T750 where ( T750.DEPENDENCY_TYPE = 'S' ) group by T750.REPORT_NAME order by c1  ");
+			
+			// Get result set meta data
+		    ResultSetMetaData rsmd = rs.getMetaData();
+		    int numColumns = rsmd.getColumnCount();
+		    Sheet sheet = wb.createSheet("subset_count");
+		    Row headerRow = sheet.createRow(0);
+	        headerRow.setHeightInPoints(12.75f);
+
+		    // Get the column names; column indices start from 1
+		    for (int i=1; i<numColumns+1; i++) {
+		        String columnName = rsmd.getColumnName(i);
+		        System.out.println(columnName);
+		        
+     
+		    }
+		    Cell cell1 = headerRow.createCell(0);
+            cell1.setCellValue("Report Name");
+            cell1.setCellStyle(styles.get("header"));
+            Cell cell2 = headerRow.createCell(1);
+            cell2.setCellValue("Count Of Dependent Reports");
+            cell2.setCellStyle(styles.get("header"));
+		    
+		    Row row;
+	        Cell cell;
+	        int rownum = 1;
+		   
+		 
+		    
+		    while(rs.next())
+		    {
+		    	String s=rs.getString(1);
+		    	String s1=rs.getString(2);
+		    	
+		    	 row = sheet.createRow(rownum);
+		    	 for(int i=1;i<=numColumns;i++)
+		    	 {
+		    		 cell=row.createCell(i-1);
+		    		 cell.setCellValue(rs.getString(i));
+		    	 }
+		    	rownum++;
+		    	
+		    }
+
+		    sheet.setColumnWidth(0, 256*60);
+	        sheet.setColumnWidth(1, 256*30);
+		    
+		    
+			//System.out.println(" statistics");
+		  
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		
+		static void unique_count(Workbook wb,String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			Map<String, CellStyle> styles = createStyles(wb);
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("unique count start");
+			ResultSet rs =stmt.executeQuery("select distinct T750.REPORT_NAME as c1, T750.REPORT_FOLDER as c2 from REPORT_STATS T750 where ( T750.DEPENDENCY_TYPE = 'U' ) order by c1, c2 ");
+			
+			// Get result set meta data
+		    ResultSetMetaData rsmd = rs.getMetaData();
+		    int numColumns = rsmd.getColumnCount();
+		    Sheet sheet = wb.createSheet("unique_count");
+		    Row headerRow = sheet.createRow(0);
+	        headerRow.setHeightInPoints(12.75f);
+
+		    // Get the column names; column indices start from 1
+		    for (int i=1; i<numColumns+1; i++) {
+		        String columnName = rsmd.getColumnName(i);
+		        System.out.println(columnName);
+		        
+     
+     
+		    }
+		    
+		    Cell cell1 = headerRow.createCell(0);
+		    cell1.setCellStyle(styles.get("header"));
+            cell1.setCellValue("Report Name");
+            Cell cell2 = headerRow.createCell(1);
+            cell2.setCellValue("Report folder");
+            cell2.setCellStyle(styles.get("header"));
+		    
+		    Row row;
+	        Cell cell;
+	        int rownum = 1;
+		   
+		 
+		    
+		    while(rs.next())
+		    {
+		    	String s=rs.getString(1);
+		    	String s1=rs.getString(2);
+		    	
+		    	 row = sheet.createRow(rownum);
+		    	 for(int i=1;i<=numColumns;i++)
+		    	 {
+		    		 cell=row.createCell(i-1);
+		    		 cell.setCellValue(rs.getString(i));
+		    	 }
+		    	rownum++;
+		    }
+		    // sheet design
+		    
+		    sheet.setColumnWidth(0, 256*60);
+	        sheet.setColumnWidth(1, 256*60);
+	        //sheet.setColumnWidth(2, 256*20);
+	       // sheet.setZoom(3, 4);
+
+			
+			//System.out.println(" statistics");
+		   
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		static void reports_details(Workbook wb,String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			Map<String, CellStyle> styles = createStyles(wb);
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("report_ details  start");
+			ResultSet rs =stmt.executeQuery("select DISTINCT T750.REPORT_NAME AS MAIN_REPORT_NAME,T750.REPORT_FOLDER AS REPORT_FOLDER,T750.DEPENDENT_REPORT_NAME AS DEPENDENT_REPORT_NAME,T750.DEPENDENT_REPORT_FOLDER  as DEPENDENT_REPORT_FOLDER ,case when T750.DEPENDENCY_TYPE = 'S' then 'Subset Report' when T750.DEPENDENCY_TYPE = 'D' then 'Duplicate Report'Else 'Unique Report' end report_type from REPORT_STATS T750");
+			
+			// Get result set meta data
+		    ResultSetMetaData rsmd = rs.getMetaData();
+		    int numColumns = rsmd.getColumnCount();
+		    Sheet sheet = wb.createSheet("report_details");
+		    Row headerRow = sheet.createRow(0);
+	        headerRow.setHeightInPoints(12.75f);
+		    
+	        
+
+		    // Get the column names; column indices start from 1
+		    for (int i=1; i<numColumns+1; i++) {
+		        String columnName = rsmd.getColumnName(i);
+		        System.out.println(columnName);
+		        columnName=columnName.replace("_", " ");
+		        Cell cell = headerRow.createCell(i-1);
+	            cell.setCellValue(columnName);
+	            cell.setCellStyle(styles.get("header"));
+     
+		        
+		    }
+		    
+		    
+		    
+		    
+		    Row row;
+	        Cell cell;
+	        int rownum = 1;
+		   
+		   
+		 
+		    
+		    while(rs.next())
+		    {
+		    	String s=rs.getString(1);
+		    	String s1=rs.getString(2);
+		    	String s2=rs.getString(3);
+		    	String s3=rs.getString(4);
+		    	String s4=rs.getString(5);
+		    	
+		    	row = sheet.createRow(rownum);
+		    	 for(int i=1;i<=numColumns;i++)
+		    	 {
+		    		 cell=row.createCell(i-1);
+		    		 cell.setCellValue(rs.getString(i));
+		    	 }
+		    	rownum++;
+		    	
+		    	
+		    	
+		    //System.out.println(s +"	"+s1+"	"+s2 +"	"+s3+"	"+s4);	
+		    }
+		    
+		    sheet.setColumnWidth(0, 256*45);
+	        sheet.setColumnWidth(1, 256*45);
+	        sheet.setColumnWidth(2, 256*45);
+	        sheet.setColumnWidth(3, 256*45);
+	        sheet.setColumnWidth(4, 256*25);
+	        
+
+			
+			//System.out.println(" statistics");
+		   
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		static void report_column_Information(Workbook wb,String USERNAME,String PASSWORD,String URL)
+		{
+			OracleConnection conn1 = null;
+			Map<String, CellStyle> styles = createStyles(wb);
+			
+			
+			try{	
+				conn1 = connect(USERNAME,PASSWORD,URL);
+				Statement stmt = conn1.createStatement();
+				System.out.println("report_ details  start");
+			ResultSet rs =stmt.executeQuery("select T732.REPORT_NAME as Report_Name,T732.COLUMN_STR as c2 from REPORT_COLUMN_STR T732");
+			
+			// Get result set meta data
+		    ResultSetMetaData rsmd = rs.getMetaData();
+		    int numColumns = rsmd.getColumnCount();
+		    System.out.println(numColumns);
+		    
+		    Sheet sheet = wb.createSheet("report_column_Information");
+		    Row headerRow = sheet.createRow(0);
+	        headerRow.setHeightInPoints(12.75f);
+		    
+
+		    // Get the column names; column indices start from 1
+		    for (int i=1; i<numColumns+1; i++) {
+		        String columnName = rsmd.getColumnName(i);
+		        System.out.println(columnName);
+		      
+		    }
+		    
+		    Cell cell1 = headerRow.createCell(0);
+            cell1.setCellValue("Report Name");
+            cell1.setCellStyle(styles.get("header"));
+            Cell cell2 = headerRow.createCell(1);
+            cell2.setCellValue("Column Name");
+            cell2.setCellStyle(styles.get("header"));
+		    
+		    Row row;
+	        Cell cell;
+	        int rownum = 1;
+		   
+		 
+		 
+		    
+		    while(rs.next())
+		    {
+		    	String s=rs.getString(1);
+		    	String s1=rs.getString(2);
+		    	
+		    	row = sheet.createRow(rownum);
+		    	 for(int i=1;i<=numColumns;i++)
+		    	 {
+		    		 cell=row.createCell(i-1);
+		    		 cell.setCellValue(rs.getString(i));
+		    	 }
+		    	rownum++;
+		    	
+		    	
+	
+		    }
+		    sheet.setColumnWidth(0, 256*60);
+	        sheet.setColumnWidth(1, 256*50);
+
+			
+			//System.out.println(" statistics");
+		    
+			 stmt.close();
+			 conn1.commit();
+			 conn1.close();
+
+			}catch(Exception e)
+			{
+				e.printStackTrace();
+				//error thrown if any of the tables does not exist .. to be ignored
+			}
+		}
+		
+		
+		private static Map<String, CellStyle> createStyles(Workbook wb){
+	        Map<String, CellStyle> styles = new HashMap<String, CellStyle>();
+	        DataFormat df = wb.createDataFormat();
+
+	        CellStyle style;
+	        Font headerFont = wb.createFont();
+	        headerFont.setBoldweight(Font.BOLDWEIGHT_BOLD);
+	        style = createBorderedStyle(wb);
+	        style.setAlignment(CellStyle.ALIGN_CENTER);
+	        //style.setFillForegroundColor(IndexedColors.LIGHT_CORNFLOWER_BLUE.getIndex());
+	        //style.setFillPattern(CellStyle.SOLID_FOREGROUND);
+	        style.setFont(headerFont);
+	        styles.put("header", style);
+
+	        
+	        style = createBorderedStyle(wb);
+	        style.setAlignment(CellStyle.ALIGN_LEFT);
+	        style.setWrapText(true);
+	        styles.put("cell_normal", style);
+
+	        
+
+	        
+
+	        style = createBorderedStyle(wb);
+	        style.setAlignment(CellStyle.ALIGN_LEFT);
+	        style.setIndention((short)1);
+	        style.setWrapText(true);
+	        styles.put("cell_indented", style);
+
+	        style = createBorderedStyle(wb);
+	        style.setFillForegroundColor(IndexedColors.BLUE.getIndex());
+	        style.setFillPattern(CellStyle.SOLID_FOREGROUND);
+	        styles.put("cell_blue", style);
+
+	        return styles;
+	    }
+		
+		private static CellStyle createBorderedStyle(Workbook wb){
+	        CellStyle style = wb.createCellStyle();
+	        style.setBorderRight(CellStyle.BORDER_THIN);
+	        style.setRightBorderColor(IndexedColors.BLACK.getIndex());
+	        style.setBorderBottom(CellStyle.BORDER_THIN);
+	        style.setBottomBorderColor(IndexedColors.BLACK.getIndex());
+	        style.setBorderLeft(CellStyle.BORDER_THIN);
+	        style.setLeftBorderColor(IndexedColors.BLACK.getIndex());
+	        style.setBorderTop(CellStyle.BORDER_THIN);
+	        style.setTopBorderColor(IndexedColors.BLACK.getIndex());
+	        return style;
+	    }
+		
+		public static String replace(String oldStr, String newStr, String inString) {
+		    int start = inString.indexOf(oldStr);
+		    if (start == -1) {
+		      return inString;
+		    }
+		    StringBuffer sb = new StringBuffer();
+		    sb.append(inString.substring(0, start));
+		    sb.append(newStr);
+		    sb.append(inString.substring(start+oldStr.length()));
+		    return sb.toString();
+		  }
+
+	}
+
