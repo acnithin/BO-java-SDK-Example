@@ -1,0 +1,137 @@
+package com.hcl.bis.coe.bo.mappingTable;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
+import com.crystaldecisions.sdk.exception.SDKException;
+import com.crystaldecisions.sdk.framework.CrystalEnterprise;
+import com.crystaldecisions.sdk.framework.IEnterpriseSession;
+import com.crystaldecisions.sdk.framework.ISessionMgr;
+import com.crystaldecisions.sdk.occa.infostore.IInfoStore;
+import com.crystaldecisions.sdk.occa.infostore.IInfoObjects;
+import com.crystaldecisions.sdk.occa.infostore.IInfoObject;
+import com.crystaldecisions.sdk.occa.infostore.CeSecurityID;
+import com.crystaldecisions.sdk.plugin.desktop.folder.IFolder;
+import com.crystaldecisions.sdk.plugin.CeKind;
+@SuppressWarnings("unused")
+public class DocumentNavigation {
+
+  public static void main(String[] args) throws SDKException, IOException {
+
+		DocDetails iDocDetails=new DocDetails();
+        IEnterpriseSession oEnterpriseSession = null;
+		
+		String sID=args[0];
+		String fileName=args[1];
+		String username = args[2];
+		String password = args[3];
+		String cmsname  = args[4];
+		String authenticationType = args[5];
+		
+		
+		final Set<String> documents=new HashSet<String>();
+		 
+		boolean loginSuccessful = false;
+	   ISessionMgr sessionMgr;
+	  
+	   
+	   try
+		 { 
+			
+		sessionMgr = CrystalEnterprise.getSessionMgr();
+		 oEnterpriseSession = sessionMgr.logon( username, password, cmsname, authenticationType);
+		
+		if (oEnterpriseSession == null)
+	 {  
+	System.out.println("login failed"); 
+	} 
+	else 
+	{  loginSuccessful = true;
+	 }
+	} 
+	catch (SDKException sdkEx)
+	 { System.out.println("SDK exception");
+	 }
+	//------------------------------------------------------------------------------------------------------------------
+	// finding Root folder of the universe
+	if(loginSuccessful = true)
+	{
+		
+		
+		
+		
+		IInfoStore iStore = (IInfoStore)oEnterpriseSession.getService("", "InfoStore"); 
+
+		// Get the current folder properties
+	String sQuery1 = "SELECT SI_ID, SI_NAME, SI_PARENTID FROM CI_INFOOBJECTS " +
+						"WHERE SI_ID = '" + sID + "' AND SI_KIND = '" + CeKind.FOLDER + "'";
+
+		IInfoObjects currentFolders = (IInfoObjects)iStore.query(sQuery1);
+
+		String sFolderName = ((IInfoObject) currentFolders.get(0)).getTitle();
+	
+		int iParentID = ((IInfoObject) currentFolders.get(0)).getParentID();
+	
+		
+		
+			
+			
+			String sQuery = "SELECT SI_ID, SI_NAME, SI_PARENTID FROM CI_INFOOBJECTS " +
+			"WHERE SI_PARENTID = '" + sID + "' AND (SI_KIND = '" + CeKind.WEBI + "' OR SI_KIND = '" + CeKind.FullClient + "' ) AND SI_INSTANCE = 'false' ORDER BY SI_NAME ASC";
+
+
+IInfoObjects webiDocuments = (IInfoObjects) iStore.query(sQuery);
+int wSize = webiDocuments.size();
+
+
+for (int j = 0; j < wSize; j++)
+{
+	IInfoObject iObj = (IInfoObject) webiDocuments.get(j);
+
+	if (iObj == null)
+	{
+		continue;
+
+	}
+	else
+	{
+
+
+if (iObj.getKind().equalsIgnoreCase("Webi"))
+{
+
+	String docName=iObj.getTitle();
+	documents.add(docName);	
+
+}
+else
+{
+
+}
+		
+	}
+} 
+			int k=1;
+Iterator<String> iter1=documents.iterator();
+{
+	while (iter1.hasNext())
+	{
+		
+	
+	String docName=iter1.next().toString();
+  System.out.println(docName);
+iDocDetails.Doc(docName,fileName,username,password,cmsname,authenticationType,k);
+
+k++;
+	}
+
+}
+	}
+
+	
+	
+	
+	}
+
+}
